@@ -1,1 +1,6 @@
 docling
+docling-core
+qdrant-client
+fastembed
+ollama
+pydantic

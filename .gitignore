@@ -211,3 +211,4 @@ __marimo__/
 
 # Project
 /data/raw
+/qdrant_data/

@@ -1,5 +1,8 @@
 import argparse,config,logging,sys
 from pathlib import Path
+
+from chat import Chat
+from qdrant import Qdrant
 from src.ingest import Ingest
 
 def setup_logger() -> None:
@@ -21,17 +24,30 @@ def main():
     ingest_parser = subparser.add_parser("updoc", help="Upload documents in vectorstore")
     ingest_parser.add_argument("--path", help="Folder or File path")
 
+    subparser.add_parser("chat", help="Start chatting with context")
+
     args = parser.parse_args()
 
-    if args.command == "updoc":
-        try:
-            ingest = Ingest()
-            ingest.load(Path(args.path))
-        except Exception as e:
-            logging.error(f"{e}")
-    else:
-        parser.print_help()
+    qdrant = Qdrant()
+    try:
+        if args.command == "updoc":
+                ingest = Ingest(qdrant)
+                ingest.load(Path(args.path))
+        elif args.command == "chat":
+            ##Testing
+            chat = Chat(qdrant)
+            while True:
+                user_input = input("\nTu: ").strip()
+                if user_input.lower() in ['exit', 'quit']:
+                    break
+                if not user_input:
+                    continue
+                chat.chat(user_input)
+        else:
+            parser.print_help()
 
+    except Exception as e:
+        logging.error(f"{e}")
 
 if __name__ == "__main__":
     main()
