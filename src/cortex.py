@@ -1,19 +1,47 @@
 import json
 import logging
+from collections import defaultdict
+from typing import Tuple
 
 import ollama
+from docling_core.transforms.chunker import BaseChunk
+
 import config
 from models import ClassifyResult
 from qdrant import Qdrant
 
-class Chat:
+class Cortex:
 
     def __init__(self, qdrant:Qdrant):
         self.qdrant = qdrant
-        self.chat_model = config.OL_CHAT_MODEL_NAME
-        self.classify_model = config.OL_CLASSIFY_MODEL_NAME
+        self.chat_model = config.OL_CHAT_MODEL
+        self.classify_model = config.OL_CLASSIFY_MODEL
         self.language = config.OL_CHAT_LANGUAGE
+        self.summarize_model = config.OL_SUMMARIZE_MODEL
+        self.summarize_model_context_window = config.OL_SUMMARIZE_MODEL_CONTEXT_WINDOW
 
+    def summarize(self, chunks: list[BaseChunk]) -> str:
+        #For now let's only make an estimate conversion from text to tokens using // 3
+        tokenized_chunks: dict[int, tuple[int,BaseChunk]] = {}
+        total_tokens = 0
+        for i,chunk in enumerate(chunks):
+            token = len(chunk.text) // 3
+            total_tokens += token
+            tokenized_chunks[i] = (token, chunk)
+
+        if self._get_context_space(self.summarize_model_context_window < total_tokens):
+            #TODO summarize all in one
+            pass
+        else:
+            #TODO summarize at chunk rate
+            pass
+
+
+    def _get_context_space(self, context_window):
+        #For now assume a fixed amount of free tokens
+        return context_window - 1024
+
+    ### prev
     def chat(self, query:str):
         data : ClassifyResult = self.classify(query)
 

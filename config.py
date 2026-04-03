@@ -8,6 +8,9 @@ COLLECTION_NAME = "test_collection"
 QD_MODEL_NAME = "intfloat/multilingual-e5-large"
 
 #OLLAMA
-OL_CHAT_MODEL_NAME = "llama3:latest"
+OL_CHAT_MODEL = "llama3:latest"
 OL_CHAT_LANGUAGE = "italian"
-OL_CLASSIFY_MODEL_NAME = "qwen2.5:3b"
+OL_CLASSIFY_MODEL = "qwen2.5:3b"
+
+OL_SUMMARIZE_MODEL = "llama3:latest"
+OL_SUMMARIZE_MODEL_CONTEXT_WINDOW = 4096

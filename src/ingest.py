@@ -36,6 +36,7 @@ class Ingest:
         logging.info(f"Processing file {path}")
         doc = self.converter.convert(path).document
         chunks = list(self.chunker.chunk(dl_doc=doc))
+        # TODO check and add metadata from dockling
         logging.debug(f"Extracted Chunks: {chunks}")
         doc_name = path.name
         self.qdrant.upload_chunked_document(doc_name, file_hash, chunks)

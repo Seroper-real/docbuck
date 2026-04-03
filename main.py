@@ -1,7 +1,7 @@
 import argparse,config,logging,sys
 from pathlib import Path
 from fastembed import TextEmbedding
-from chat import Chat
+from cortex import Cortex
 from qdrant import Qdrant
 from src.ingest import Ingest
 
@@ -40,7 +40,7 @@ def main():
             ingest.load(Path(args.path))
         elif args.command == "chat":
             qdrant = Qdrant()
-            chat = Chat(qdrant)
+            chat = Cortex(qdrant)
             chat.start_chatting()
         elif args.command == "qd":
             if args.models:
