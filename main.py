@@ -2,8 +2,9 @@ import argparse,config,logging,sys
 from pathlib import Path
 from fastembed import TextEmbedding
 from cortex import Cortex
+from ingestion_pipeline import IngestionPipeline
 from qdrant import Qdrant
-from src.ingest import Ingest
+from src.document_reader import DocumentReader
 
 def setup_logger() -> None:
     """Configure the root logger using config.py settings."""
@@ -35,12 +36,10 @@ def main():
 
     try:
         if args.command == "updoc":
-            qdrant = Qdrant()
-            ingest = Ingest(qdrant)
-            ingest.load(Path(args.path))
+            ingestion_pipeline = IngestionPipeline()
+            ingestion_pipeline.load(Path(args.path))
         elif args.command == "chat":
-            qdrant = Qdrant()
-            chat = Cortex(qdrant)
+            chat = Cortex()
             chat.start_chatting()
         elif args.command == "qd":
             if args.models:
