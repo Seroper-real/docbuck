@@ -1,3 +1,4 @@
+from abc import ABC
 from pydantic import BaseModel
 from typing import Optional, Literal, Self
 
@@ -6,7 +7,7 @@ class Context(BaseModel):
     category: str
     start_date: str | None
     end_date: str | None
-    text: str
+    content: str
     summary: str
 
 class Chunk(BaseModel):
@@ -16,37 +17,44 @@ class Chunk(BaseModel):
 
 class Document(BaseModel):
     document_id: str
-    file_hash: str
+    document_name: str
     context: Context
     chunks: list[Chunk]
 
-class ChunkPayload(BaseModel):
-    """
-    For Saving Chunks in Qdrant
-    """
+class CommonPayload(BaseModel, ABC):
     document_id: str
-    file_hash: str
-    chunk_index: int
-    content: str
     category: str
     start_date: str | None
     end_date: str | None
+    content: str
+
+class ContextPayload(CommonPayload):
+    summary: str
+
+    @classmethod
+    def from_context(cls, document_id: str, context: Context) -> Self:
+        return cls(
+            document_id=document_id,
+            category=context.category,
+            start_date=context.start_date,
+            end_date=context.end_date,
+            content=context.content,
+            summary=context.summary
+        )
+
+class UniversePayload(CommonPayload):
+    chunk_index: int
 
     @classmethod
     def from_document(cls, doc: Document, chunk: Chunk) -> Self:
-        """
-        Custom factory to map a Document and a specific Chunk into a ChunkPayload.
-        """
         return cls(
             document_id=doc.document_id,
-            file_hash=doc.file_hash,
             chunk_index=chunk.chunk_index,
             content=chunk.content,
             category=doc.context.category,
             start_date=doc.context.start_date,
             end_date=doc.context.end_date
         )
-
 
 ##before
 class ClassifyResult(BaseModel):

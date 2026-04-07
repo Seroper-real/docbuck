@@ -26,6 +26,9 @@ def main():
     ingest_parser = subparser.add_parser("updoc", help="Upload documents in vectorstore")
     ingest_parser.add_argument("--path", help="Folder or File path")
 
+    ingest_parser = subparser.add_parser("deldoc", help="Delete documents in vectorstore")
+    ingest_parser.add_argument("--path", help="Folder or File path")
+
     #Qdrant
     qd_parser = subparser.add_parser("qd", help="Qdrant commands")
     qd_parser.add_argument("--models", action="store_true", help="List of available models")
@@ -38,6 +41,9 @@ def main():
         if args.command == "updoc":
             ingestion_pipeline = IngestionPipeline()
             ingestion_pipeline.load(Path(args.path))
+        elif args.command == "deldoc":
+            ingestion_pipeline = IngestionPipeline()
+            ingestion_pipeline.delete(Path(args.path))
         elif args.command == "chat":
             chat = Cortex()
             chat.start_chatting()

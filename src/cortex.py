@@ -8,7 +8,7 @@ import config
 from models import ClassifyResult, Context, Chunk
 
 
-def _generate(model:str, prompt:str, system_prompt:str = None, response_format:str = 'json', temperature:float = 0) -> str:
+def _generate(model:str, prompt:str, system_prompt:str = None, response_format:str = '', max_output_token:int = -1, temperature:float = 0.3) -> str:
     logging.debug(
         "------------------------------- GENERATE START ------------------------------------------\n"
         f"Generate input: model={model}, format={response_format}, "
@@ -20,7 +20,10 @@ def _generate(model:str, prompt:str, system_prompt:str = None, response_format:s
         system = system_prompt,
         prompt=prompt,
         format=response_format,
-        options={"temperature": temperature}
+        options={
+            "temperature": temperature,
+            "num_predict": max_output_token,
+        }
     )
     logging.debug(
         f"Generated: {response['response']}"
@@ -29,8 +32,8 @@ def _generate(model:str, prompt:str, system_prompt:str = None, response_format:s
     return response['response']
 
 
-def _generate_to_model[T:BaseModel](model_class: type[T], model:str, prompt:str, system_prompt:str = None, temperature:float = 0) -> T:
-    response = _generate(model,prompt,system_prompt,'json',temperature)
+def _generate_to_model[T:BaseModel](model_class: type[T], model:str, prompt:str, system_prompt:str = None, max_output_token:int = -1, temperature:float = 0) -> T:
+    response = _generate(model,prompt,system_prompt,'json',max_output_token, temperature)
     try:
         raw_data = json.loads(response)
         return model_class(**raw_data)
@@ -46,6 +49,11 @@ def _get_context_space(context_window:int) -> int:
 def _calculate_tokens(text:str) -> int:
     # For now let's only make an estimate conversion from text to tokens using // 3
     return len(text) // 3
+
+
+def _parse_categories_for_prompt(categories: set[str]) -> str:
+    return ",".join(categories) if categories else "None (You must define a new one)"
+
 
 class Cortex:
 
@@ -82,7 +90,7 @@ class Cortex:
                 {raw_context}
                 
                 CURRENT_CATEGORIES:
-                {self._parse_categories_for_prompt(categories)}
+                {_parse_categories_for_prompt(categories)}
                 
                 ### TASKS
                 1. **Summarize**: Create a concise summary of the document in English.
@@ -102,7 +110,7 @@ class Cortex:
                 
                 {{
                   "summary": "<Summary>",
-                  "text": "<Context>",
+                  "content": "<Context>",
                   "category": "<Category>",
                   "start_date": "<Date start or null>"
                   "end_date": "<Date End or null>"
@@ -111,7 +119,11 @@ class Cortex:
         return _generate_to_model(Context, self.summarize_model, prompt)
 
     def _context_from_summaries(self, tokenized_chunks: dict[int, tuple[int,Chunk]], categories: set[str]) -> Context:
-        summarized_chunks = "\n".join([self._summarize_portion(index,[chunk]) for index, chunk in tokenized_chunks.values()]) #TODO pass more chunks at the time, within the limit of context_window
+        summarized_chunks = ""
+        for index, chunk in tokenized_chunks.values():
+            summarized_chunks += f"{self._summarize_portion(index,[chunk])}\n"
+
+
         prompt = f"""
             ### ROLE
             You are an Expert Metadata Architect. Your task is to analyze a collection of PRE-GENERATED SUMMARIES 
@@ -122,7 +134,7 @@ class Cortex:
             {summarized_chunks}
 
             EXISTING_SYSTEM_CATEGORIES:
-            {self._parse_categories_for_prompt(categories)}
+            {_parse_categories_for_prompt(categories)}
 
             ### TASKS
             1. **Final Summary**: Synthesize the partial summaries into a single, cohesive, and exhaustive overview in English.
@@ -144,7 +156,7 @@ class Cortex:
             ### OUTPUT FORMAT
             {{
               "summary": "<Summary>",
-              "text": "<Context>",
+              "content": "<Context>",
               "category": "<Category>",
               "start_date": "<Date start or null>"
               "end_date": "<Date End or null>"
@@ -155,7 +167,7 @@ class Cortex:
     def _summarize_portion(self, index:int, chunks: list[Chunk]) -> str:
         context = [chunk.content for chunk in chunks]  # Todo mettere [chunk metadata | chunk text]
         raw_context = "\n".join(context)
-        logging.info(f"Summarize chunk index: {index} | Text: {raw_context}")
+        logging.info(f"Summarize chunk index: {index} | Text: {raw_context.replace('\n', '\\n')}")
 
         prompt = f"""
             ### ROLE
@@ -172,10 +184,7 @@ class Cortex:
             3. Provide the summary in English.
             4. **IMPORTANT**: Return ONLY the summary text. 
         """
-        return _generate(self.summarize_model, prompt)
-
-    def _parse_categories_for_prompt(self, categories: set[str]) -> str:
-        return ",".join(categories) if categories else "None (You must define a new one)"
+        return _generate(self.summarize_model, prompt, max_output_token=1024)
 
     ### prev
     def chat(self, query:str):

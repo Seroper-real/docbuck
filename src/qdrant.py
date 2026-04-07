@@ -4,13 +4,15 @@ from typing import Any
 
 from docling_core.transforms.chunker import BaseChunk
 from qdrant_client import QdrantClient, models
-from qdrant_client.http.models import ScoredPoint
+from qdrant_client.http.models import ScoredPoint, Filter, FieldCondition, MatchValue
 
 import config
-from models import Chunk, Document, ChunkPayload
+from models import Chunk, Document, UniversePayload, ContextPayload
 
 
 class Qdrant:
+    DOCUMENT_ID_FIELD = "document_id"
+    CATEGORY_FIELD = "category"
 
     def __init__(self):
         self.client = QdrantClient(config.QDRANT_URL)
@@ -34,7 +36,7 @@ class Qdrant:
     def get_categories(self) -> set[str]:
         categories: set[str] = set()
         next_offset = None
-        field = "category"
+        field = self.CATEGORY_FIELD
         while True:
             points, next_offset = self.client.scroll(
                 collection_name=self.collection_context,
@@ -51,6 +53,17 @@ class Qdrant:
                 break
         return categories
 
+    def document_exist(self, document_id:str) -> bool:
+        result = self.client.scroll(
+            collection_name=self.collection_universe,
+            scroll_filter=models.Filter(
+                must=[
+                    models.FieldCondition(key=self.DOCUMENT_ID_FIELD, match=models.MatchValue(value=document_id))
+                ]
+            )
+        )
+        return len(result[0]) > 0
+
     def upload_document(self, document:Document) -> None:
         #upload the summary to context collection
         self.client.upsert(
@@ -59,7 +72,7 @@ class Qdrant:
                 models.PointStruct(
                     id=document.document_id,
                     vector=models.Document(text=document.context.summary, model=self.model_name),
-                    payload=document.context.model_dump()
+                    payload=ContextPayload.from_context(document.document_id,document.context).model_dump()
                 )
             ]
         )
@@ -70,10 +83,22 @@ class Qdrant:
                 models.PointStruct(
                     id=str(uuid.uuid4()),
                     vector=models.Document(text=chunk.content, model=self.model_name),
-                    payload=ChunkPayload.from_document(document,chunk).model_dump()
+                    payload=UniversePayload.from_document(document, chunk).model_dump()
                 ) for chunk in document.chunks
             ]
         )
+
+    def _delete_document(self, collection_name:str, document_id:str):
+        self.client.delete(
+            collection_name,
+            points_selector=Filter(
+                must=[FieldCondition(key=self.DOCUMENT_ID_FIELD, match=MatchValue(value=document_id))]
+            )
+        )
+
+    def delete_document(self, document_id:str):
+        self._delete_document(self.collection_context,document_id)
+        self._delete_document(self.collection_universe,document_id)
 
     ### Before
     def query_points(self, text:str) -> list[ScoredPoint]:
@@ -111,14 +136,3 @@ class Qdrant:
         )
         sorted_chunks = sorted(results[0], key=lambda x: x.payload['chunk'])
         return "\n".join([c.payload['content'] for c in sorted_chunks])
-
-    def document_exist(self, hash_file:str) -> bool:
-        result = self.client.scroll(
-            collection_name=self.collection_universe,
-            scroll_filter=models.Filter(
-                must=[
-                    models.FieldCondition(key="file_hash", match=models.MatchValue(value=hash_file))
-                ]
-            )
-        )
-        return len(result[0]) > 0
