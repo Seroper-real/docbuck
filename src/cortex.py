@@ -120,9 +120,29 @@ class Cortex:
 
     def _context_from_summaries(self, tokenized_chunks: dict[int, tuple[int,Chunk]], categories: set[str]) -> Context:
         summarized_chunks = ""
-        for index, chunk in tokenized_chunks.values():
-            summarized_chunks += f"{self._summarize_portion(index,[chunk])}\n"
+        available_tokens = _get_context_space(self.summarize_model_context_window)
+        current_tokens = 0
+        batch = []
+        for index, (token, chunk) in sorted(tokenized_chunks.items()):
+            if current_tokens + token > available_tokens:
+                if batch:
+                    summarized_chunks += f"{self._summarize_portion(batch)}\n"
+                else:
+                    #This is the case where a single chunk is larger than the context windows. Unrealistic.
+                    #For now let's just pass it as is
+                    logging.warning(f"Found a chunk larger than the contex window: {self.summarize_model_context_window} Chunk: {chunk.content}")
+                    summarized_chunks += f"{self._summarize_portion([chunk])}\n"
+                    current_tokens = 0
+                    continue
 
+                current_tokens = 0
+                batch.clear()
+
+            current_tokens += token
+            batch.append(chunk)
+
+        if batch:
+            summarized_chunks += f"{self._summarize_portion(batch)}\n"
 
         prompt = f"""
             ### ROLE
@@ -164,27 +184,32 @@ class Cortex:
         """
         return _generate_to_model(Context, self.summarize_model, prompt)
 
-    def _summarize_portion(self, index:int, chunks: list[Chunk]) -> str:
-        context = [chunk.content for chunk in chunks]  # Todo mettere [chunk metadata | chunk text]
+    def _summarize_portion(self, chunks: list[Chunk]) -> str:
+        context = [chunk.content for chunk in chunks]
         raw_context = "\n".join(context)
-        logging.info(f"Summarize chunk index: {index} | Text: {raw_context.replace('\n', '\\n')}")
+        logging.info(f"Summarize {len(chunks)} chunks | Text: {raw_context.replace('\n', '\\n')}")
 
+        output_prefix = "<SUMMARY>"
         prompt = f"""
             ### ROLE
-            You are a precise Document Summarizer. 
-            Your goal is to provide a concise and exhaustive summary of the provided text fragment.
-
+            You are a precise Document Summarizer.
+    
             ### INPUT DATA
             TEXT_CHUNK:
             {raw_context}
-
+    
             ### INSTRUCTIONS
             1. Summarize the content of the TEXT_CHUNK above.
             2. The summary must be exhaustive but concise.
             3. Provide the summary in English.
-            4. **IMPORTANT**: Return ONLY the summary text. 
-        """
-        return _generate(self.summarize_model, prompt, max_output_token=1024)
+            4. Do NOT include any preamble, introduction, or closing remarks.
+            5. Do NOT use markdown formatting.
+            6. Start DIRECTLY with the summary content.
+    
+            ### OUTPUT
+            {output_prefix}
+            """
+        return _generate(self.summarize_model, prompt, max_output_token=1024).strip().removeprefix(output_prefix).strip()
 
     ### prev
     def chat(self, query:str):
@@ -251,7 +276,6 @@ class Cortex:
             format='json',
             options={
                 "temperature": 0,
-                #"num_predict": 50
             }
         )
         logging.debug(f"Classify output: {response}")
