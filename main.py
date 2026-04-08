@@ -4,6 +4,7 @@ from fastembed import TextEmbedding
 from cortex import Cortex
 from ingestion_pipeline import IngestionPipeline
 from qdrant import Qdrant
+from query_pipeline import QueryPipeline
 from src.document_reader import DocumentReader
 
 def setup_logger() -> None:
@@ -45,8 +46,8 @@ def main():
             ingestion_pipeline = IngestionPipeline()
             ingestion_pipeline.delete(Path(args.path))
         elif args.command == "chat":
-            chat = Cortex()
-            chat.start_chatting()
+            query_pipeline = QueryPipeline()
+            query_pipeline.start_chatting()
         elif args.command == "qd":
             if args.models:
                 print(f"{'Name':<40} | {'Dim':<6} | {'Description'}")

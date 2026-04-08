@@ -16,7 +16,6 @@ class IngestionPipeline:
         self.qdrant = Qdrant()
         self.document_reader = DocumentReader()
         self.cortex = Cortex()
-        self.categories: set[str] = set(line.strip() for line in Path("resources/categories.txt").read_text().splitlines() if line.strip())
 
 
     def load(self, path: Path) -> None:
@@ -46,9 +45,8 @@ class IngestionPipeline:
         chunks = self.document_reader.get_chunks(path)
         logging.debug(f"Extracted Chunks: {chunks}")
         doc_name = path.name
-        db_categories: set[str] = self.qdrant.get_categories()
-        self.categories |= db_categories
-        context: Context = self.cortex.extract_context_info(chunks, self.categories)
+        categories: set[str] = self.qdrant.get_categories()
+        context: Context = self.cortex.extract_context_info(chunks, categories)
         document: Document = Document(document_id=document_id,document_name=doc_name,context=context,chunks=chunks)
         self.qdrant.upload_document(document)
 

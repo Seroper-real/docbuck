@@ -1,13 +1,15 @@
 import logging
 import uuid
+from pathlib import Path
 from typing import Any
 
 from docling_core.transforms.chunker import BaseChunk
 from qdrant_client import QdrantClient, models
-from qdrant_client.http.models import ScoredPoint, Filter, FieldCondition, MatchValue
+from qdrant_client.grpc import DatetimeRange
+from qdrant_client.http.models import ScoredPoint, Filter, FieldCondition, MatchValue, MatchAny
 
 import config
-from models import Chunk, Document, UniversePayload, ContextPayload
+from models import Chunk, Document, UniversePayload, ContextPayload, ClassifiedQuery, SearchResult
 
 
 class Qdrant:
@@ -21,6 +23,7 @@ class Qdrant:
         self.model_name = config.QD_MODEL_NAME
         self._create_collection_if_not_exits(self.collection_universe)
         self._create_collection_if_not_exits(self.collection_context)
+        self.initial_categories: set[str] = set(line.strip() for line in Path("resources/categories.txt").read_text().splitlines() if line.strip())
 
     def _create_collection_if_not_exits(self, name):
         if not self.client.collection_exists(name):
@@ -34,6 +37,11 @@ class Qdrant:
         )
 
     def get_categories(self) -> set[str]:
+        categories = self._get_categories_on_db()
+        categories |= self.initial_categories
+        return categories
+
+    def _get_categories_on_db(self) -> set[str]:
         categories: set[str] = set()
         next_offset = None
         field = self.CATEGORY_FIELD
@@ -99,6 +107,79 @@ class Qdrant:
     def delete_document(self, document_id:str):
         self._delete_document(self.collection_context,document_id)
         self._delete_document(self.collection_universe,document_id)
+
+    def search_context(self, query: ClassifiedQuery, limit: int = 50, score_threshold: float = 0.5) -> list[SearchResult[ContextPayload]]:
+        logging.debug(f"context_search - Search query: {query}")
+        conditions = []
+        if query.categories:
+            conditions.append(
+                FieldCondition(
+                    key="category",
+                    match=MatchAny(any=query.categories)
+                )
+            )
+        if query.start_date:
+            conditions.append(
+                FieldCondition(
+                    key="start_date",
+                    range=DatetimeRange(gte=query.start_date)
+                )
+            )
+        if query.end_date:
+            conditions.append(
+                FieldCondition(
+                    key="end_date",
+                    range=DatetimeRange(lte=query.end_date)
+                )
+            )
+        search_filter = Filter(must=conditions) if conditions else None
+
+        results = self.client.query_points(
+            collection_name=self.collection_context,
+            query=models.Document(
+                text=query.optimized_query,
+                model=self.model_name
+            ),
+            query_filter=search_filter,
+            limit=limit,
+            score_threshold=score_threshold
+        ).points
+
+        return [
+            SearchResult(
+                payload=ContextPayload(**point.payload), score=point.score, context_score=None
+            ) for point in results
+        ]
+
+    def search_universe(self, query: ClassifiedQuery, document_ids: list[str], limit: int = 100, score_threshold: float = 0.3) -> list[SearchResult[UniversePayload]]:
+        search_filter = Filter(
+            must=[
+                FieldCondition(
+                    key=self.DOCUMENT_ID_FIELD,
+                    match=MatchAny(any=document_ids)
+                )
+            ]
+        )
+
+        results = self.client.query_points(
+            collection_name=self.collection_universe,
+            query=models.Document(
+                text=query,
+                model=self.model_name
+            ),
+            query_filter=search_filter,
+            limit=limit,
+            score_threshold=score_threshold
+        ).points
+
+        return [
+            SearchResult[UniversePayload](
+                payload=UniversePayload(**point.payload),
+                score=point.score,
+                context_score=None
+            )
+            for point in results
+        ]
 
     ### Before
     def query_points(self, text:str) -> list[ScoredPoint]:

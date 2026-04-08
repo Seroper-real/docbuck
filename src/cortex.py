@@ -5,7 +5,8 @@ import ollama
 from pydantic import BaseModel, ValidationError
 
 import config
-from models import ClassifyResult, Context, Chunk
+from models import ClassifyResult, Context, Chunk, ClassifiedQuery, SearchResult, ContextPayload, ContextFilterScore, \
+    UniversePayload
 
 
 def _generate(model:str, prompt:str, system_prompt:str = None, response_format:str = '', max_output_token:int = -1, temperature:float = 0.3) -> str:
@@ -52,7 +53,7 @@ def _calculate_tokens(text:str) -> int:
 
 
 def _parse_categories_for_prompt(categories: set[str]) -> str:
-    return ",".join(categories) if categories else "None (You must define a new one)"
+    return ",".join(categories) if categories else "None"
 
 
 class Cortex:
@@ -60,7 +61,8 @@ class Cortex:
     def __init__(self):
         self.chat_model = config.OL_CHAT_MODEL
         self.classify_model = config.OL_CLASSIFY_MODEL
-        self.language = config.OL_CHAT_LANGUAGE
+        self.output_language = config.OL_CHAT_LANGUAGE
+        self.processing_language = config.OL_PROCESSING_LANGUAGE
         self.summarize_model = config.OL_SUMMARIZE_MODEL
         self.summarize_model_context_window = config.OL_SUMMARIZE_MODEL_CONTEXT_WINDOW
 
@@ -93,12 +95,13 @@ class Cortex:
                 {_parse_categories_for_prompt(categories)}
                 
                 ### TASKS
-                1. **Summarize**: Create a concise summary of the document in English.
+                1. **Summarize**: Create a concise summary of the document in {self.processing_language}.
                 2. **Context**: Provide a 1-sentence "elevator pitch" that describes exactly what this specific document is about.
                 3. **Category**: 
                     - Compare the document content with the CURRENT_CATEGORIES provided.
                     - If it fits an existing category, use it.
                     - If it does not fit any, define a new, concise category name (1-3 words).
+                    - If category is None, you must define a new one
                 4. **Time Period**: 
                     - Identify if the document refers to a specific timeframe.
                     - If the document has a date in it or the nature of the document is time relevant (e.g., a bill), define a range of dates, using YYYY-MM-DD ad format
@@ -157,7 +160,7 @@ class Cortex:
             {_parse_categories_for_prompt(categories)}
 
             ### TASKS
-            1. **Final Summary**: Synthesize the partial summaries into a single, cohesive, and exhaustive overview in English.
+            1. **Final Summary**: Synthesize the partial summaries into a single, cohesive, and exhaustive overview in {self.processing_language}.
             2. **Global Context**: Provide a 1-sentence "elevator pitch" that defines the document's core identity.
             3. **Category Refinement**: 
                - Look at the EXISTING_SYSTEM_CATEGORIES. 
@@ -201,7 +204,7 @@ class Cortex:
             ### INSTRUCTIONS
             1. Summarize the content of the TEXT_CHUNK above.
             2. The summary must be exhaustive but concise.
-            3. Provide the summary in English.
+            3. Provide the summary in {self.processing_language}.
             4. Do NOT include any preamble, introduction, or closing remarks.
             5. Do NOT use markdown formatting.
             6. Start DIRECTLY with the summary content.
@@ -211,80 +214,134 @@ class Cortex:
             """
         return _generate(self.summarize_model, prompt, max_output_token=1024).strip().removeprefix(output_prefix).strip()
 
-    ### prev
-    def chat(self, query:str):
-        data : ClassifyResult = self.classify(query)
-
-        context_text = self.qdrant.get_context_results(data.user_query_optimized)
-
-        system_prompt = f"""
-            You are a helpful assistant. Answer the question using ONLY the provided context.
-            If the answer is not in the context, say that you don't know. 
-            Do not use outside knowledge.
-            Talk in {self.language} 
+    def query_classification(self, user_query:str, categories: set[str]) -> ClassifiedQuery:
+        prompt = f"""
+            ### ROLE
+            You are a precise Query Analyzer for a RAG system.
+            Your goal is to analyze the user query and extract structured information to optimize document retrieval.
+    
+            ### AVAILABLE CATEGORIES
+            {_parse_categories_for_prompt(categories)}
+    
+            ### INPUT
+            USER_QUERY: {user_query}
+    
+            ### INSTRUCTIONS
+            1. Select the most relevant categories from AVAILABLE CATEGORIES that match the query intent. Return an empty list if none match.
+            2. Detect if the query refers to a specific date range. Extract start and end date if present, otherwise set both to null.
+            3. Generate an optimized query for vector search: rephrase it to maximize semantic similarity with relevant document chunks.
+            4. Return the original query in {self.processing_language}.
+    
+            ### CONSTRAINTS
+            - Return ONLY a valid JSON object, no preamble, no markdown, no explanation.
+            - Dates must be in ISO 8601 format (YYYY-MM-DD) or null.
+            - The optimized query must be in {self.processing_language}.
+    
+            ### OUTPUT FORMAT
+            {{
+                "categories": ["category1", "category2"],
+                "start_date": "YYYY-MM-DD or null"
+                "end_date": "YYYY-MM-DD or null"
+                "optimized_query": "...",
+                "original_query": "..."
+            }}
             """
+        return _generate_to_model(ClassifiedQuery, self.classify_model, prompt)
 
-        user_content = f"""
-            Context:
-            {context_text}
+    def context_filtering(self, query: ClassifiedQuery, datas: list[SearchResult[ContextPayload]], threshold: float = 0.7):
+        for data in datas:
+            data.context_score = self._calculate_document_relevance(query.original_query, data.payload.summary)
+        return [data for data in datas if data.context_score.score > threshold]
 
-            User request: {query}
+    def _calculate_document_relevance(self, query: str, document_summary: str) -> ContextFilterScore:
+        prompt = f"""
+            ### ROLE
+            You are a precise Relevance Evaluator for a RAG system.
+            Your goal is to evaluate how relevant a document is to the user query.
+
+            ### USER QUERY
+            {query}
+
+            ### DOCUMENT SUMMARY
+            {document_summary}
+
+            ### INSTRUCTIONS
+            1. Analyze how relevant the DOCUMENT SUMMARY is to the USER QUERY.
+            2. Assign a relevance score between 0.0 and 1.0 where:
+               - 0.0 = completely irrelevant
+               - 0.5 = partially relevant
+               - 1.0 = perfectly relevant
+            3. Provide a brief justification for the score.
+
+            ### CONSTRAINTS
+            - Return ONLY a valid JSON object, no preamble, no markdown, no explanation.
+
+            ### OUTPUT FORMAT
+            {{
+                "score": 0.0,
+                "reason": "..."
+            }}
             """
+        return _generate_to_model(ContextFilterScore, model=self.summarize_model, prompt=prompt)
 
-        stream = ollama.generate(
-            model=self.chat_model,
-            system=system_prompt,
-            prompt=user_content,
-            stream=True,
-        )
-        for chunk in stream:
-            content = chunk['response']
-            print(content, end="", flush=True)
-        print()
+    def query_expansion(self, original_query: str, contexts: list[SearchResult[ContextPayload]]) -> str:
+        output_prefix = "<QUERY>"
+        prompt = f"""
+            ### ROLE
+            You are a precise Query Optimizer for a RAG system.
+            Your goal is to expand and optimize the user query based on the available context summaries.
+    
+            ### ORIGINAL QUERY
+            {original_query}
+    
+            ### AVAILABLE CONTEXTS
+            {"\n".join([context.payload.summary for context in contexts])}
+    
+            ### INSTRUCTIONS
+            1. Analyze the ORIGINAL QUERY and the AVAILABLE CONTEXTS.
+            2. Generate an expanded query that:
+               - Preserves the original intent of the user
+               - Incorporates relevant terminology and concepts from the AVAILABLE CONTEXTS
+               - Maximizes semantic similarity with the document chunks
+            3. The expanded query must be in English.
+    
+            ### CONSTRAINTS
+            - Provide the optimized query in {self.processing_language}.
+            - Do NOT include any preamble, introduction, or closing remarks.
+            - Do NOT use markdown formatting.
+            - Start DIRECTLY with the optimized query.
 
-    def start_chatting(self):
-        logging.info("You can start chatting!")
-        while True:
-            user_input = input("\nTu: ").strip()
-            if user_input.lower() in ['exit', 'quit']:
-                break
-            if not user_input:
-                continue
-            self.chat(user_input)
-
-    def classify(self,user_query:str) -> ClassifyResult:
-
-        system_prompt = """
-            You are a specialized intent classifier for a RAG (Retrieval-Augmented Generation) system.
-            Analyze the user's input and provide a classification in strict JSON format.
-            
-            CLASSIFICATION CATEGORIES:
-            - "SEARCH": Default category. Use when the user asks for specific facts, technical details, or general information across the entire knowledge base.
-            - "SUMMARIZE": Use when the user explicitly requests a summary, synthesis, or overview of a full document or multiple documents.
-            - "DOCUMENT_SPECIFIC": Use when the user's question is tied to a specific file name or an identifiable unique source mentioned in the prompt.
-            
-            OUTPUT REQUIREMENTS:
-            - Return ONLY a JSON object.
-            - Do not include explanations, greetings, or preamble.
-            - Format: {"intent": "<CATEGORY>", "target_file": "<filename_string>" or null, "user_query_optimized": "<optimized version of the user query for vectorial database search>"}
+            ### OUTPUT FORMAT
+            {output_prefix}
             """
+        return _generate(self.summarize_model, prompt).strip().removeprefix(output_prefix).strip()
 
-        response = ollama.generate(
-            model=self.classify_model,
-            system=system_prompt,
-            prompt=user_query,
-            format='json',
-            options={
-                "temperature": 0,
-            }
-        )
-        logging.debug(f"Classify output: {response}")
-
-        try:
-            raw_data = json.loads(response['response'])
-            logging.debug(f"Classify output: {raw_data}")
-            return ClassifyResult(**raw_data)
-        except json.JSONDecodeError:
-            # Fallback to default search if JSON is malformed
-            logging.warning(f"Classify output has produced a malformed JSON: {response}")
-            return ClassifyResult(intent="SEARCH",target_file=None,user_query_optimized=user_query)
+    def response(self, optimized_query: str, contexts: list[SearchResult[UniversePayload]]) -> str:
+        chunks = "\n\n".join([
+            f"[{r.payload.document_id}] {r.payload.content}" #TODO document name
+            for r in contexts
+        ])
+        prompt = f"""
+            ### ROLE
+            You are a precise Question Answering assistant.
+            Your goal is to answer the user query based exclusively on the provided document chunks.
+    
+            ### USER QUERY
+            {optimized_query}
+    
+            ### DOCUMENT CHUNKS
+            {chunks}
+    
+            ### INSTRUCTIONS
+            1. Answer the USER QUERY using ONLY the information provided in the DOCUMENT CHUNKS.
+            2. If the answer is not present in the chunks, say explicitly that you don't have enough information to answer.
+            3. Be concise and precise.
+            4. Do not hallucinate or infer information not present in the chunks.
+    
+            ### CONSTRAINTS
+            - Do NOT use markdown formatting.
+            - Do NOT include preamble or closing remarks.
+            - Start DIRECTLY with the answer.
+            - Talk in {self.output_language} 
+            """
+        return _generate(self.summarize_model,prompt)

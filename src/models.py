@@ -1,6 +1,6 @@
 from abc import ABC
 from pydantic import BaseModel
-from typing import Optional, Literal, Self
+from typing import Optional, Literal, Self, TypeVar, Generic
 
 
 class Context(BaseModel):
@@ -55,6 +55,24 @@ class UniversePayload(CommonPayload):
             start_date=doc.context.start_date,
             end_date=doc.context.end_date
         )
+
+class ContextFilterScore(BaseModel):
+    score: float
+    reason: str
+
+T = TypeVar("T", UniversePayload, ContextPayload)
+class SearchResult(BaseModel, Generic[T]):
+    payload: T
+    score: float
+    context_score: ContextFilterScore | None
+
+class ClassifiedQuery(BaseModel):
+    categories: list[str]
+    start_date: str | None
+    end_date: str | None
+    optimized_query: str
+    original_query: str
+
 
 ##before
 class ClassifyResult(BaseModel):
