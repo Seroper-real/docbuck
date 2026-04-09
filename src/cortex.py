@@ -3,9 +3,10 @@ import logging
 
 import ollama
 from pydantic import BaseModel, ValidationError
+from datetime import date
 
 import config
-from models import ClassifyResult, Context, Chunk, ClassifiedQuery, SearchResult, ContextPayload, ContextFilterScore, \
+from models import Context, Chunk, ClassifiedQuery, SearchResult, ContextPayload, ContextFilterScore, \
     UniversePayload
 
 
@@ -53,8 +54,7 @@ def _calculate_tokens(text:str) -> int:
 
 
 def _parse_categories_for_prompt(categories: set[str]) -> str:
-    return ",".join(categories) if categories else "None"
-
+    return "\n".join([f"- {c}" for c in categories]) if categories else "None"
 
 class Cortex:
 
@@ -227,8 +227,13 @@ class Cortex:
             USER_QUERY: {user_query}
     
             ### INSTRUCTIONS
-            1. Select the most relevant categories from AVAILABLE CATEGORIES that match the query intent. Return an empty list if none match.
-            2. Detect if the query refers to a specific date range. Extract start and end date if present, otherwise set both to null.
+            1. Select all the relevant categories from AVAILABLE CATEGORIES that match the query intent. Return an empty list if none match.
+            2. Detect if the query refers to a specific date range. Calculate start and end date if present 
+               or if they are implicit:
+               - 'in year 2025' → start_date: 2025-01-01, end_date: 2025-12-31
+               - 'in 2026' → start_date: 2026-01-01, end_date: 2026-12-31  
+               - 'last month' → calculate relative to today: {date.today().isoformat()}
+               Otherwise set both to null.
             3. Generate an optimized query for vector search: rephrase it to maximize semantic similarity with relevant document chunks.
             4. Return the original query in {self.processing_language}.
     
@@ -239,14 +244,14 @@ class Cortex:
     
             ### OUTPUT FORMAT
             {{
-                "categories": ["category1", "category2"],
-                "start_date": "YYYY-MM-DD or null"
-                "end_date": "YYYY-MM-DD or null"
+                "categories": [<List of Matched categories>],
+                "start_date": "YYYY-MM-DD or null",
+                "end_date": "YYYY-MM-DD or null",
                 "optimized_query": "...",
                 "original_query": "..."
             }}
             """
-        return _generate_to_model(ClassifiedQuery, self.classify_model, prompt)
+        return _generate_to_model(ClassifiedQuery, self.summarize_model, prompt)
 
     def context_filtering(self, query: ClassifiedQuery, datas: list[SearchResult[ContextPayload]], threshold: float = 0.7):
         for data in datas:
@@ -258,28 +263,31 @@ class Cortex:
             ### ROLE
             You are a precise Relevance Evaluator for a RAG system.
             Your goal is to evaluate how relevant a document is to the user query.
-
+    
             ### USER QUERY
             {query}
-
+    
             ### DOCUMENT SUMMARY
             {document_summary}
-
+    
             ### INSTRUCTIONS
             1. Analyze how relevant the DOCUMENT SUMMARY is to the USER QUERY.
             2. Assign a relevance score between 0.0 and 1.0 where:
-               - 0.0 = completely irrelevant
-               - 0.5 = partially relevant
-               - 1.0 = perfectly relevant
+               - 0.0 = the document topic is completely different from the query
+               - 0.3 = loosely relevant, shares some topics
+               - 0.5 = partially relevant, answers part of the query
+               - 0.7 = mostly relevant, covers the main topic
+               - 1.0 = perfectly relevant, directly answers the query
             3. Provide a brief justification for the score.
-
+    
             ### CONSTRAINTS
             - Return ONLY a valid JSON object, no preamble, no markdown, no explanation.
-
+            - The score MUST reflect your analysis, not a default value.
+    
             ### OUTPUT FORMAT
             {{
-                "score": 0.0,
-                "reason": "..."
+                "score": <float between 0.0 and 1.0>,
+                "reason": "<your justification>"
             }}
             """
         return _generate_to_model(ContextFilterScore, model=self.summarize_model, prompt=prompt)

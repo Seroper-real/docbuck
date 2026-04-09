@@ -1,12 +1,10 @@
 import logging
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
-from docling_core.transforms.chunker import BaseChunk
 from qdrant_client import QdrantClient, models
-from qdrant_client.grpc import DatetimeRange
-from qdrant_client.http.models import ScoredPoint, Filter, FieldCondition, MatchValue, MatchAny
+from qdrant_client.models import ScoredPoint, Filter, FieldCondition, MatchValue, MatchAny
 
 import config
 from models import Chunk, Document, UniversePayload, ContextPayload, ClassifiedQuery, SearchResult
@@ -122,16 +120,18 @@ class Qdrant:
             conditions.append(
                 FieldCondition(
                     key="start_date",
-                    range=DatetimeRange(gte=query.start_date)
+                    range=models.DatetimeRange(gte=datetime(query.start_date.year, query.start_date.month, query.start_date.day,tzinfo=timezone.utc))
                 )
             )
+
         if query.end_date:
             conditions.append(
                 FieldCondition(
-                    key="end_date",
-                    range=DatetimeRange(lte=query.end_date)
+                    key="start_date",
+                    range=models.DatetimeRange(lte=datetime(query.end_date.year, query.end_date.month, query.end_date.day,tzinfo=timezone.utc))
                 )
             )
+
         search_filter = Filter(must=conditions) if conditions else None
 
         results = self.client.query_points(
@@ -164,7 +164,7 @@ class Qdrant:
         results = self.client.query_points(
             collection_name=self.collection_universe,
             query=models.Document(
-                text=query,
+                text=query.optimized_query,
                 model=self.model_name
             ),
             query_filter=search_filter,

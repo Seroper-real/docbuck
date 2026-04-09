@@ -1,12 +1,14 @@
 from abc import ABC
+from datetime import date
+
 from pydantic import BaseModel
 from typing import Optional, Literal, Self, TypeVar, Generic
 
 
 class Context(BaseModel):
     category: str
-    start_date: str | None
-    end_date: str | None
+    start_date: date | None
+    end_date: date | None
     content: str
     summary: str
 
@@ -24,8 +26,8 @@ class Document(BaseModel):
 class CommonPayload(BaseModel, ABC):
     document_id: str
     category: str
-    start_date: str | None
-    end_date: str | None
+    start_date: date | None
+    end_date: date | None
     content: str
 
 class ContextPayload(CommonPayload):
@@ -68,18 +70,7 @@ class SearchResult(BaseModel, Generic[T]):
 
 class ClassifiedQuery(BaseModel):
     categories: list[str]
-    start_date: str | None
-    end_date: str | None
+    start_date: date | None
+    end_date: date | None
     optimized_query: str
     original_query: str
-
-
-##before
-class ClassifyResult(BaseModel):
-    intent: Literal["SEARCH","SUMMARIZE","DOCUMENT_SPECIFIC"]
-    target_file: Optional[str] = None
-    user_query_optimized: str
-
-    class Config:
-        # Permette di gestire eventuali campi extra nel JSON senza errore
-        extra = "ignore"

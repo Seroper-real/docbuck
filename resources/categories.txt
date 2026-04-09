@@ -1,33 +1,10 @@
-Bills & Utilities
-Invoices
-Receipts
-Taxes
+Finance
+Legal
+Medical
+Technical
 Insurance
-Bank & Financial Statements
-Contracts & Agreements
-Legal Documents
-Fines & Penalties
-Licenses & Permits
-Identity Documents
-Certificates
-Medical Records
-Prescriptions
-Education & Certificates
-Employment Documents
-Payroll & Payslips
-Reports
-Manuals & Guides
-Warranties
-Orders & Purchase Documents
-Shipping & Delivery Documents
-Travel Documents
-Tickets & Reservations
-Subscriptions
-Correspondence
-Forms & Applications
-Meeting Notes & Minutes
-Presentations
-Policies & Procedures
-Plans & Proposals
-Marketing Materials
-Technical Documentation
+Personal
+Automotive
+Utilities
+Tax
+Work

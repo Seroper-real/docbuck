@@ -17,6 +17,8 @@ def setup_logger() -> None:
         datefmt=config.LOG_DATEFMT,
         stream=sys.stdout
     )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
 
 def main():
     setup_logger()

@@ -15,7 +15,7 @@ class QueryPipeline:
         categories: set[str] = self.qdrant.get_categories()
         classified_query : ClassifiedQuery = self.cortex.query_classification(query, categories)
         context_results : list[SearchResult[ContextPayload]] = self.qdrant.search_context(classified_query)
-        context_filtered : list[SearchResult[ContextPayload]] = self.cortex.context_filtering(classified_query,context_results)
+        context_filtered : list[SearchResult[ContextPayload]] = context_results #self.cortex.context_filtering(classified_query,context_results) TODO context filter must be fine tuned
         universe_results : list[SearchResult[UniversePayload]] =self.qdrant.search_universe(classified_query, [context.payload.document_id for context in context_filtered])
         optimized_semantic_search_query = self.cortex.query_expansion(classified_query.original_query,context_filtered)
         return self.cortex.response(optimized_semantic_search_query, universe_results)
@@ -28,4 +28,4 @@ class QueryPipeline:
                 break
             if not user_input:
                 continue
-            self.query(user_input)
+            logging.info(self.query(user_input))
