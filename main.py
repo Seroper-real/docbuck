@@ -1,23 +1,12 @@
-import argparse,config,logging,sys
+import argparse
+import logging
 from pathlib import Path
+
 from fastembed import TextEmbedding
-from cortex import Cortex
 from ingestion_pipeline import IngestionPipeline
-from qdrant import Qdrant
+
 from query_pipeline import QueryPipeline
-from src.document_reader import DocumentReader
-
-def setup_logger() -> None:
-    """Configure the root logger using config.py settings."""
-    level = getattr(logging, config.LOG_LEVEL.upper(), logging.ERROR)
-
-    logging.basicConfig(
-        level=level,
-        format=config.LOG_FORMAT,
-        datefmt=config.LOG_DATEFMT,
-        stream=sys.stdout
-    )
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+from logger import setup_logger
 
 
 def main():

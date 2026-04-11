@@ -9,14 +9,10 @@ import config
 from models import Context, Chunk, ClassifiedQuery, SearchResult, ContextPayload, ContextFilterScore, \
     UniversePayload
 
+logger = logging.getLogger("cortex")
 
 def _generate(model:str, prompt:str, system_prompt:str = None, response_format:str = '', max_output_token:int = -1, temperature:float = 0.3) -> str:
-    logging.debug(
-        "------------------------------- GENERATE START ------------------------------------------\n"
-        f"Generate input: model={model}, format={response_format}, "
-        f"temperature={temperature}, prompt={prompt}, "
-        f"system_prompt={system_prompt if system_prompt else 'None'}"
-    )
+    logging.info(f"Generate input: model={model}, format={response_format}, temperature={temperature}, prompt={prompt}, system_prompt={system_prompt if system_prompt else 'None'}")
     response = ollama.generate(
         model=model,
         system = system_prompt,
@@ -27,10 +23,7 @@ def _generate(model:str, prompt:str, system_prompt:str = None, response_format:s
             "num_predict": max_output_token,
         }
     )
-    logging.debug(
-        f"Generated: {response['response']}"
-        "\n------------------------------- GENERATE END --------------------------------------------"
-    )
+    logging.info(f"Generate output: {response['response']}")
     return response['response']
 
 

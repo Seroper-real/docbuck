@@ -151,7 +151,7 @@ class Qdrant:
             ) for point in results
         ]
 
-    def search_universe(self, query: ClassifiedQuery, document_ids: list[str], limit: int = 100, score_threshold: float = 0.3) -> list[SearchResult[UniversePayload]]:
+    def search_universe(self, query: str, document_ids: list[str] = None, limit: int = 100, score_threshold: float = 0.3) -> list[SearchResult[UniversePayload]]:
         search_filter = Filter(
             must=[
                 FieldCondition(
@@ -159,12 +159,12 @@ class Qdrant:
                     match=MatchAny(any=document_ids)
                 )
             ]
-        )
+        ) if document_ids else None
 
         results = self.client.query_points(
             collection_name=self.collection_universe,
             query=models.Document(
-                text=query.optimized_query,
+                text=query,
                 model=self.model_name
             ),
             query_filter=search_filter,
