@@ -1,14 +1,23 @@
 from abc import ABC
 from datetime import date
 
-from pydantic import BaseModel
-from typing import Optional, Literal, Self, TypeVar, Generic
+from pydantic import BaseModel, field_validator
+from typing import Self, TypeVar, Generic
 
-
-class Context(BaseModel):
-    category: str
+class BaseDateModel(BaseModel):
     start_date: date | None
     end_date: date | None
+
+    @field_validator("start_date", "end_date", mode="before")
+    @classmethod
+    def parse_null(cls, v):
+        if v == "null" or v == "":
+            return None
+        return v
+
+
+class Context(BaseDateModel):
+    category: str
     content: str
     summary: str
 
@@ -23,11 +32,9 @@ class Document(BaseModel):
     context: Context
     chunks: list[Chunk]
 
-class CommonPayload(BaseModel, ABC):
+class CommonPayload(BaseDateModel, ABC):
     document_id: str
     category: str
-    start_date: date | None
-    end_date: date | None
     content: str
 
 class ContextPayload(CommonPayload):
@@ -68,9 +75,7 @@ class SearchResult(BaseModel, Generic[T]):
     score: float
     context_score: ContextFilterScore | None
 
-class ClassifiedQuery(BaseModel):
+class ClassifiedQuery(BaseDateModel):
     categories: list[str]
-    start_date: date | None
-    end_date: date | None
     optimized_query: str
-    original_query: str
+    user_query: str

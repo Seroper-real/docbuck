@@ -210,5 +210,5 @@ __marimo__/
 .idea
 
 # Project
-/data/raw
+/data/
 /qdrant_data/

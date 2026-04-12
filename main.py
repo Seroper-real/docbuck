@@ -27,6 +27,9 @@ def main():
 
     subparser.add_parser("chat", help="Start chatting with context")
 
+    ingest_parser = subparser.add_parser("query", help="Ask a specific query")
+    ingest_parser.add_argument("--text", help="The input query")
+
     args = parser.parse_args()
 
     try:
@@ -39,6 +42,9 @@ def main():
         elif args.command == "chat":
             query_pipeline = QueryPipeline()
             query_pipeline.start_chatting()
+        elif args.command == "query":
+            query_pipeline = QueryPipeline()
+            query_pipeline.query(args.text)
         elif args.command == "qd":
             if args.models:
                 print(f"{'Name':<40} | {'Dim':<6} | {'Description'}")

@@ -1,11 +1,9 @@
-import os,logging
 from pathlib import Path
-from docling.document_converter import DocumentConverter
-from docling_core.transforms.chunker import HybridChunker, BaseChunk
 
-import util
+from docling.document_converter import DocumentConverter
+from docling_core.transforms.chunker import HybridChunker
+
 from models import Chunk
-from qdrant import Qdrant
 
 
 class DocumentReader:

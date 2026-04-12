@@ -212,13 +212,13 @@ class Cortex:
             ### ROLE
             You are a precise Query Analyzer for a RAG system.
             Your goal is to analyze the user query and extract structured information to optimize document retrieval.
-    
+            
             ### AVAILABLE CATEGORIES
             {_parse_categories_for_prompt(categories)}
-    
+            
             ### INPUT
             USER_QUERY: {user_query}
-    
+            
             ### INSTRUCTIONS
             1. Select all the relevant categories from AVAILABLE CATEGORIES that match the query intent. Return an empty list if none match.
             2. Detect if the query refers to a specific date range. Calculate start and end date if present 
@@ -227,62 +227,62 @@ class Cortex:
                - 'in 2026' → start_date: 2026-01-01, end_date: 2026-12-31  
                - 'last month' → calculate relative to today: {date.today().isoformat()}
                Otherwise set both to null.
-            3. Generate an optimized query for vector search: rephrase it to maximize semantic similarity with relevant document chunks.
-            4. Return the original query in {self.processing_language}.
-    
+            3. Generate an optimized query for a max compatibility with a vector database in {self.processing_language}
+            4. Translate USER_QUERY in {self.processing_language}
+            
             ### CONSTRAINTS
             - Return ONLY a valid JSON object, no preamble, no markdown, no explanation.
             - Dates must be in ISO 8601 format (YYYY-MM-DD) or null.
-            - The optimized query must be in {self.processing_language}.
-    
+            
             ### OUTPUT FORMAT
             {{
                 "categories": [<List of Matched categories>],
                 "start_date": "YYYY-MM-DD or null",
                 "end_date": "YYYY-MM-DD or null",
                 "optimized_query": "...",
-                "original_query": "..."
+                "user_query": "<USER_QUERY translated in {self.processing_language}>"
             }}
-            """
+            """ #TODO test {self.processing_language} = query language
         return _generate_to_model(ClassifiedQuery, self.summarize_model, prompt)
 
-    def context_filtering(self, query: ClassifiedQuery, datas: list[SearchResult[ContextPayload]], threshold: float = 0.7):
+    def context_filtering(self, query: ClassifiedQuery, datas: list[SearchResult[UniversePayload]], threshold: float = 0.3, limit: int = 10):
         for data in datas:
-            data.context_score = self._calculate_document_relevance(query.original_query, data.payload.summary)
-        return [data for data in datas if data.context_score.score > threshold]
+            data.context_score = self._calculate_chunk_relevance(query.user_query, data.payload.content)
+        return sorted([data for data in datas if data.context_score.score > threshold],key=lambda x: x.context_score.score, reverse=True)[:limit]
 
-    def _calculate_document_relevance(self, query: str, document_summary: str) -> ContextFilterScore:
+    def _calculate_chunk_relevance(self, query: str, chunk: str) -> ContextFilterScore:
         prompt = f"""
-            ### ROLE
-            You are a precise Relevance Evaluator for a RAG system.
-            Your goal is to evaluate how relevant a document is to the user query.
-    
-            ### USER QUERY
-            {query}
-    
-            ### DOCUMENT SUMMARY
-            {document_summary}
-    
-            ### INSTRUCTIONS
-            1. Analyze how relevant the DOCUMENT SUMMARY is to the USER QUERY.
-            2. Assign a relevance score between 0.0 and 1.0 where:
-               - 0.0 = the document topic is completely different from the query
-               - 0.3 = loosely relevant, shares some topics
-               - 0.5 = partially relevant, answers part of the query
-               - 0.7 = mostly relevant, covers the main topic
-               - 1.0 = perfectly relevant, directly answers the query
-            3. Provide a brief justification for the score.
-    
-            ### CONSTRAINTS
-            - Return ONLY a valid JSON object, no preamble, no markdown, no explanation.
-            - The score MUST reflect your analysis, not a default value.
-    
-            ### OUTPUT FORMAT
-            {{
-                "score": <float between 0.0 and 1.0>,
-                "reason": "<your justification>"
-            }}
-            """
+        ### ROLE
+        You are a precise Relevance Evaluator for a RAG system.
+        Your goal is to evaluate how relevant a document chunk is relative to the user query.
+
+        ### USER QUERY
+        {query}
+
+        ### DOCUMENT CHUNK
+        {chunk}
+
+        ### INSTRUCTIONS
+        1. Analyze how relevant the DOCUMENT CHUNK is relative to the USER QUERY.
+        2. Assign a relevance score between 0.0 and 1.0 as a continuous value:
+           - 0.0 = completely irrelevant, different topic
+           - 0.2 = very loosely related, same broad domain
+           - 0.4 = shares the same topic but does not answer the query
+           - 0.6 = covers the main topic, partially answers the query
+           - 0.8 = mostly answers the query with minor gaps
+           - 1.0 = directly and completely answers the query
+        3. Provide a brief justification for the score.
+
+        ### CONSTRAINTS
+        - Return ONLY a valid JSON object, no preamble, no markdown, no explanation.
+        - The score MUST be a precise float reflecting your analysis, not a rounded value.
+
+        ### OUTPUT FORMAT
+        {{
+            "score": <float between 0.0 and 1.0>,
+            "reason": "<your justification>"
+        }}
+        """
         return _generate_to_model(ContextFilterScore, model=self.summarize_model, prompt=prompt)
 
     def query_expansion(self, original_query: str, contexts: list[SearchResult[ContextPayload]]) -> str:
@@ -304,7 +304,7 @@ class Cortex:
                - Preserves the original intent of the user
                - Incorporates relevant terminology and concepts from the AVAILABLE CONTEXTS
                - Maximizes semantic similarity with the document chunks
-            3. The expanded query must be in English.
+            3. The expanded query must be in {self.processing_language}.
     
             ### CONSTRAINTS
             - Provide the optimized query in {self.processing_language}.
