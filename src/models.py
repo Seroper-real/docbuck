@@ -79,3 +79,8 @@ class ClassifiedQuery(BaseDateModel):
     categories: list[str]
     optimized_query: str
     user_query: str
+
+class Picker(BaseModel):
+    thought:str
+    selected:str
+    confidence:float

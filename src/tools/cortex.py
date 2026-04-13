@@ -7,12 +7,12 @@ from datetime import date
 
 import config
 from models import Context, Chunk, ClassifiedQuery, SearchResult, ContextPayload, ContextFilterScore, \
-    UniversePayload
+    UniversePayload, Picker
 
 logger = logging.getLogger("cortex")
 
 def _generate(model:str, prompt:str, system_prompt:str = None, response_format:str = '', max_output_token:int = -1, temperature:float = 0.3) -> str:
-    logging.info(f"Generate input: model={model}, format={response_format}, temperature={temperature}, prompt={prompt}, system_prompt={system_prompt if system_prompt else 'None'}")
+    logging.debug(f"Generate input: model={model}, format={response_format}, temperature={temperature}, prompt={prompt}, system_prompt={system_prompt if system_prompt else 'None'}")
     response = ollama.generate(
         model=model,
         system = system_prompt,
@@ -23,7 +23,7 @@ def _generate(model:str, prompt:str, system_prompt:str = None, response_format:s
             "num_predict": max_output_token,
         }
     )
-    logging.info(f"Generate output: {response['response']}")
+    logging.debug(f"Generate output: {response['response']}")
     return response['response']
 
 
@@ -346,3 +346,35 @@ class Cortex:
             - Talk in {self.output_language} 
             """
         return _generate(self.summarize_model,prompt)
+
+    def chain_picker(self, user_prompt:str) -> Picker:
+        prompt = f"""
+            ### ROLE
+            You are a precise prompt analyzer.
+            Your goal is to analyze the user prompt and determine the best approach to take.
+            
+            ### AVAILABLE CHAINS
+            - **Needle Picker Chain**: Use for finding specific, isolated information or single data points.
+            - **Summary Chain**: Use for condensing one or more documents into main ideas.
+            - **Aggregation Chain**: Use for calculating, comparing, or synthesizing data across multiple sources.
+            
+            ### INSTRUCTIONS
+            1. **Intent Classification**: Analyze the user's request to identify which of the `AVAILABLE CHAINS` best fits the required operation.
+            2. **Logic Application**: Match the functional requirements of the request with the specific usage definitions provided in the list above.
+            3. **Reasoning**: Briefly justify your choice based on the identified intent.
+            4. **Exclusivity**: Select exactly one chain. If the request is ambiguous, select the most prominent intent.
+            
+            ### USER PROMPT
+            "{user_prompt}"
+            
+            
+            ### OUTPUT FORMAT
+            Your response must be a valid JSON object:
+            
+            {
+              "thought": "<Brief explanation of the selection logic>",
+              "selected": "<Exact name of the chosen chain>",
+              "confidence": <float number between 0.0 and 1.0 included>
+            }
+            """
+        return _generate_to_model(Picker, model=self.classify_model, prompt=prompt)

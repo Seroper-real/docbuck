@@ -1,6 +1,6 @@
 import logging,sys
 
-from config import LOG_FORMAT, LOG_DATEFMT, LOG_LEVEL, LOG_CORTEX_LEVEL, LOG_ONELINE
+from config import LOG_FORMAT, LOG_DATEFMT, LOG_LEVEL, LOG_LEVEL_CORTEX, LOG_ONELINE, LOG_LEVEL_CHAIN
 
 
 class _OneLineFormatter(logging.Formatter):
@@ -22,4 +22,6 @@ def setup_logger() -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
     cortex_logger = logging.getLogger("cortex")
-    cortex_logger.setLevel(getattr(logging, LOG_CORTEX_LEVEL.upper(), logging.ERROR))
+    cortex_logger.setLevel(getattr(logging, LOG_LEVEL_CORTEX.upper(), logging.ERROR))
+    cortex_logger = logging.getLogger("chain")
+    cortex_logger.setLevel(getattr(logging, LOG_LEVEL_CHAIN.upper(), logging.ERROR))

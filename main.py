@@ -3,9 +3,9 @@ import logging
 from pathlib import Path
 
 from fastembed import TextEmbedding
-from ingestion_pipeline import IngestionPipeline
 
-from query_pipeline import QueryPipeline
+from agent import Agent
+from ingestion.ingestion_chain import IngestionChain
 from logger import setup_logger
 
 
@@ -34,17 +34,17 @@ def main():
 
     try:
         if args.command == "updoc":
-            ingestion_pipeline = IngestionPipeline()
-            ingestion_pipeline.load(Path(args.path))
+            ingestion_chain = IngestionChain()
+            ingestion_chain.load(Path(args.path))
         elif args.command == "deldoc":
-            ingestion_pipeline = IngestionPipeline()
-            ingestion_pipeline.delete(Path(args.path))
+            ingestion_chain = IngestionChain()
+            ingestion_chain.delete(Path(args.path))
         elif args.command == "chat":
-            query_pipeline = QueryPipeline()
-            query_pipeline.start_chatting()
+            agent = Agent()
+            agent.start_chatting()
         elif args.command == "query":
-            query_pipeline = QueryPipeline()
-            query_pipeline.query(args.text)
+            agent = Agent()
+            agent.chat(args.text)
         elif args.command == "qd":
             if args.models:
                 print(f"{'Name':<40} | {'Dim':<6} | {'Description'}")
@@ -54,7 +54,6 @@ def main():
                     model_name = model.get("model")
                     dim = model.get("dim")
                     description = model.get("description", "No description")
-
                     print(f"{model_name:<40} | {dim:<6} | {description}")
         else:
             parser.print_help()

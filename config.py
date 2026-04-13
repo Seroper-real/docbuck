@@ -4,8 +4,9 @@ LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s - %(message)s"
 LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
 LOG_ONELINE = True
 
-# ─── Cortex Logging ──────────────────────────────────────────────────────────
-LOG_CORTEX_LEVEL = "INFO"
+# ─── Specific Logging ──────────────────────────────────────────────────────────
+LOG_LEVEL_CORTEX = "INFO"
+LOG_LEVEL_CHAIN  = "INFO"
 
 # ─── Qdrant Props ────────────────────────────────────────────────────────────
 QDRANT_URL = "http://localhost:6333" #Or use ":memory:"

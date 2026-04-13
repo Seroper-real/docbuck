@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from qdrant_client import QdrantClient, models
-from qdrant_client.models import ScoredPoint, Filter, FieldCondition, MatchValue, MatchAny
+from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchAny
 
 import config
-from models import Chunk, Document, UniversePayload, ContextPayload, ClassifiedQuery, SearchResult
+from models import Document, UniversePayload, ContextPayload, ClassifiedQuery, SearchResult
 
 
 class Qdrant:
@@ -151,7 +151,7 @@ class Qdrant:
             ) for point in results
         ]
 
-    def search_universe(self, query: str, document_ids: list[str] = None, limit: int = 100, score_threshold: float = 0.3) -> list[SearchResult[UniversePayload]]:
+    def search_universe(self, query: str, document_ids: list[str] = None, limit: int = 100, score_threshold: float = 0.6) -> list[SearchResult[UniversePayload]]:
         search_filter = Filter(
             must=[
                 FieldCondition(
@@ -182,26 +182,6 @@ class Qdrant:
         ]
 
     ### Before
-    def query_points(self, text:str) -> list[ScoredPoint]:
-        logging.debug(f"Search query: {text}")
-        return self.client.query_points(
-            collection_name=self.collection_universe,
-            query=models.Document(
-                text=text,
-                model=self.model_name
-            )
-        ).points
-
-    def get_context_results(self, text:str) -> str:
-        search_results : list[ScoredPoint] = self.query_points(text)
-        formatted_chunks = []
-        for hit in search_results:
-            data = Chunk(**hit.payload)
-            chunk_text = f"[File: {data.document_id} | Chunk: {data.chunk_index} | Content:{data.content}]"
-            formatted_chunks.append(chunk_text)
-        logging.debug(f"Formatted Chunks:\n{formatted_chunks}")
-        return "\n".join(formatted_chunks)
-
     def get_full_document_context(self, doc_name: str) -> str:
         #TODO da implementare e testare
         results = self.client.scroll(

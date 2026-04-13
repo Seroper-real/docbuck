@@ -4,13 +4,13 @@ from pathlib import Path
 from typing import Callable
 
 import util
-from cortex import Cortex
-from document_reader import DocumentReader
+from ingestion.document_reader import DocumentReader
+from tools.cortex import Cortex
 from models import Context, Document
-from qdrant import Qdrant
+from tools.qdrant import Qdrant
 
 
-class IngestionPipeline:
+class IngestionChain:
 
     def __init__(self):
         self.qdrant = Qdrant()
