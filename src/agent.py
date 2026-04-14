@@ -22,7 +22,7 @@ class Agent:
             self.chat(user_input)
 
     def chat(self, prompt:str):
-        picker : Picker = self.cortex.chain_picker(prompt) #TODO debug
+        picker : Picker = self.cortex.chain_picker(prompt)
         logging.debug(f"Picker: {picker}")
         if picker.selected == "Needle Picker Chain":
             print(self.needle_picker_chain.query(prompt))

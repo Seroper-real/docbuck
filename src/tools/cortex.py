@@ -363,6 +363,7 @@ class Cortex:
             2. **Logic Application**: Match the functional requirements of the request with the specific usage definitions provided in the list above.
             3. **Reasoning**: Briefly justify your choice based on the identified intent.
             4. **Exclusivity**: Select exactly one chain. If the request is ambiguous, select the most prominent intent.
+            5 **Language**: Write in {self.processing_language}
             
             ### USER PROMPT
             "{user_prompt}"
@@ -371,10 +372,10 @@ class Cortex:
             ### OUTPUT FORMAT
             Your response must be a valid JSON object:
             
-            {
+            {{
               "thought": "<Brief explanation of the selection logic>",
               "selected": "<Exact name of the chosen chain>",
               "confidence": <float number between 0.0 and 1.0 included>
-            }
+            }}
             """
-        return _generate_to_model(Picker, model=self.classify_model, prompt=prompt)
+        return _generate_to_model(Picker, self.classify_model, prompt)
