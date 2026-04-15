@@ -6,6 +6,7 @@ from pydantic import BaseModel, ValidationError
 from datetime import date
 
 import config
+from chains.chain import Chain
 from models import Context, Chunk, ClassifiedQuery, SearchResult, ContextPayload, ContextFilterScore, \
     UniversePayload, Picker
 
@@ -347,16 +348,14 @@ class Cortex:
             """
         return _generate(self.summarize_model,prompt)
 
-    def chain_picker(self, user_prompt:str) -> Picker:
+    def chain_picker(self, chains: list[Chain], user_prompt:str) -> Picker:
         prompt = f"""
             ### ROLE
             You are a precise prompt analyzer.
             Your goal is to analyze the user prompt and determine the best approach to take.
             
             ### AVAILABLE CHAINS
-            - **Needle Picker Chain**: Use for finding specific, isolated information or single data points.
-            - **Summary Chain**: Use for condensing one or more documents into main ideas.
-            - **Aggregation Chain**: Use for calculating, comparing, or synthesizing data across multiple sources.
+            {"\n".join(chain.llm_line for chain in chains)}            
             
             ### INSTRUCTIONS
             1. **Intent Classification**: Analyze the user's request to identify which of the `AVAILABLE CHAINS` best fits the required operation.
