@@ -25,10 +25,7 @@ class NeedlePickerChain(Chain):
         logging.debug(f"Classified query: {classified_query}")
         context_results : list[SearchResult[ContextPayload]] = self.qdrant.search_context(classified_query)
         logging.debug(f"Found {len(context_results)} contexts: {context_results}")
-
-        #After getting context, determine if documents are the relevant for summary -> context filtering
-        #Get full scan of documents for summary. If the document is larger than the context windows, summarize N chunks at the time
-        # TODO
+        #TODO check optimized query and result from qdrant
         universe_results : list[SearchResult[UniversePayload]] =self.qdrant.search_universe(classified_query.optimized_query, [context.payload.document_id for context in context_results], limit=5, score_threshold=0.8)
         logging.debug(f"Found {len(universe_results)} in Universe: {universe_results}")
         universe_filtered : list[SearchResult[UniversePayload]] = self.cortex.context_filtering(classified_query,universe_results)
